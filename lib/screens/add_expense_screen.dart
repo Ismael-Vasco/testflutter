@@ -2,11 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../models/expense.dart';
 import '../models/person.dart';
 import '../state/expenses_provider.dart';
 
 class AddExpenseScreen extends ConsumerStatefulWidget {
-  const AddExpenseScreen({super.key});
+  const AddExpenseScreen({super.key, this.expenseToEdit});
+
+  /// Si viene distinto de null, la pantalla actúa en modo edición sobre
+  /// este gasto en lugar de crear uno nuevo.
+  final Expense? expenseToEdit;
+
+  bool get isEditing => expenseToEdit != null;
 
   @override
   ConsumerState<AddExpenseScreen> createState() => _AddExpenseScreenState();
@@ -14,9 +21,20 @@ class AddExpenseScreen extends ConsumerStatefulWidget {
 
 class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _nameController = TextEditingController();
-  final _amountController = TextEditingController();
-  Person _selectedPayer = Person.values.first;
+  late final TextEditingController _nameController;
+  late final TextEditingController _amountController;
+  late Person _selectedPayer;
+
+  @override
+  void initState() {
+    super.initState();
+    final editing = widget.expenseToEdit;
+    _nameController = TextEditingController(text: editing?.name ?? '');
+    _amountController = TextEditingController(
+      text: editing != null ? editing.amount.toStringAsFixed(2) : '',
+    );
+    _selectedPayer = editing?.paidBy ?? Person.values.first;
+  }
 
   @override
   void dispose() {
@@ -52,18 +70,35 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
       return;
     }
     final amount = double.parse(_amountController.text.trim().replaceAll(',', '.'));
-    ref.read(expensesProvider.notifier).addExpense(
-          name: _nameController.text.trim(),
-          amount: amount,
-          paidBy: _selectedPayer,
-        );
+    final name = _nameController.text.trim();
+    final notifier = ref.read(expensesProvider.notifier);
+
+    if (widget.isEditing) {
+      notifier.updateExpense(
+        widget.expenseToEdit!.id,
+        name: name,
+        amount: amount,
+        paidBy: _selectedPayer,
+      );
+    } else {
+      notifier.addExpense(name: name, amount: amount, paidBy: _selectedPayer);
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(widget.isEditing ? 'Gasto actualizado' : 'Gasto agregado'),
+        duration: const Duration(seconds: 2),
+      ),
+    );
     context.pop();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Agregar gasto')),
+      appBar: AppBar(
+        title: Text(widget.isEditing ? 'Editar gasto' : 'Agregar gasto'),
+      ),
       body: Form(
         key: _formKey,
         child: ListView(
@@ -74,6 +109,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
               decoration: const InputDecoration(
                 labelText: 'Nombre del gasto',
                 border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.short_text),
               ),
               textInputAction: TextInputAction.next,
               validator: _validateName,
@@ -85,6 +121,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                 labelText: 'Monto',
                 prefixText: '\$ ',
                 border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.attach_money),
               ),
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
               textInputAction: TextInputAction.done,
@@ -96,6 +133,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
               decoration: const InputDecoration(
                 labelText: '¿Quién pagó?',
                 border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.person_outline),
               ),
               items: [
                 for (final person in Person.values)
@@ -113,8 +151,8 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
             const SizedBox(height: 24),
             FilledButton.icon(
               onPressed: _submit,
-              icon: const Icon(Icons.check),
-              label: const Text('Guardar gasto'),
+              icon: Icon(widget.isEditing ? Icons.check : Icons.add),
+              label: Text(widget.isEditing ? 'Guardar cambios' : 'Guardar gasto'),
             ),
           ],
         ),

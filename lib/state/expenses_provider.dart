@@ -31,6 +31,31 @@ class ExpensesNotifier extends StateNotifier<List<Expense>> {
       ),
     ];
   }
+
+  void updateExpense(
+    String id, {
+    required String name,
+    required double amount,
+    required Person paidBy,
+  }) {
+    state = [
+      for (final expense in state)
+        if (expense.id == id)
+          Expense(
+            id: id,
+            name: name,
+            amount: amount,
+            paidBy: paidBy,
+            createdAt: expense.createdAt,
+          )
+        else
+          expense,
+    ];
+  }
+
+  void removeExpense(String id) {
+    state = state.where((expense) => expense.id != id).toList();
+  }
 }
 
 final expensesProvider =
